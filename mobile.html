@@ -132,7 +132,7 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:10px 16px 90p
   </div>
 </header>
 <div class="stats">命中 <b id="stHit">-</b> 条 · 含去年价 <b id="stLy">-</b> 条</div>
-<div id="loading"><span class="spin"></span><br>正在加载价格数据库…</div>
+<div id="loading"><span class="spin"></span><br>首次访问需下载数据库（约 7.2MB，成功一次后秒开）<div id="prog">正在连接服务器…</div></div>
 <main style="display:none" id="main">
   <!-- 查询 -->
   <section class="view on" id="vSearch">
@@ -186,11 +186,31 @@ let hist=lsGet('di_hist',[]);
 let quote=lsGet('di_quote',[]);
 
 /* ---------- 数据加载 ---------- */
+async function loadBuf(){
+  const el=document.getElementById('prog');
+  const setP=t=>{if(el)el.innerHTML=t};
+  try{
+    const res=await fetch('di_price_data.json.gz?v='+DATA_VER);
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    const total=+res.headers.get('Content-Length')||0;
+    if(res.body&&total){
+      const rd=res.body.getReader(),chunks=[];let got=0;const t0=Date.now();
+      for(;;){const r=await rd.read();if(r.done)break;chunks.push(r.value);got+=r.value.length;
+        const sec=(Date.now()-t0)/1000,sp=got/Math.max(sec,0.1);
+        setP('正在下载 '+(got/1048576).toFixed(1)+' / '+(total/1048576).toFixed(1)+' MB'+(sec>2?'（约还需 '+Math.max(1,Math.round((total-got)/sp))+' 秒）':''));
+      }
+      const all=new Uint8Array(got);let off=0;for(const c of chunks){all.set(c,off);off+=c.length;}
+      return all.buffer;
+    }
+    return await res.arrayBuffer();
+  }catch(e){
+    setP('⚠ 数据库下载失败（'+((e&&e.message)||e)+'）。请检查网络后重试；wifi 访问 github.io 慢/被拦时，可切手机流量或用局域网地址。');
+    return null;
+  }
+}
 async function loadData(){
-  let res;
-  try{res=await fetch('di_price_data.json.gz?v='+DATA_VER,{cache:'no-store'});}
-  catch(e){res=await fetch('di_price_data.json.gz?v='+DATA_VER);}
-  const buf=await res.arrayBuffer();
+  const buf=await loadBuf();
+  if(!buf)return;
   const txt=await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
   const j=JSON.parse(txt);D=j.data;N=j.n;
   if(EXPECT_N&&N!==EXPECT_N){

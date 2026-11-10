@@ -104,7 +104,7 @@ footer{color:var(--muted);font-size:12px;padding:16px 28px}
     <div class="stat"><div class="num" id="stLy">-</div><div class="lab">含去年价物料</div></div>
     <div class="stat"><div class="num" id="stInc">-</div><div class="lab">其中价涨 ≥5% 物料</div></div>
   </div>
-  <div id="loading"><span class="spin"></span>正在加载价格数据库（约 8MB，首次加载后秒查）…</div>
+  <div id="loading"><span class="spin"></span>首次访问需下载数据库（约 7.2MB，成功一次后秒开）<div id="prog">正在连接服务器…</div></div>
   <div class="tblbox" id="tblbox" style="display:none">
     <table id="tbl">
       <thead><tr>
@@ -159,14 +159,31 @@ function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 let hist=lsGet('di_hist',[]), quote=lsGet('di_quote',[]);
 const rowCalc={};   // 结果行里填过的 特折/数量（按数据索引记忆，翻页不丢）
 
-async function loadData(){
-  let res;
+async function loadBuf(){
+  const el=document.getElementById('prog');
+  const setP=t=>{if(el)el.innerHTML=t};
   try{
-    res=await fetch('di_price_data.json.gz?v='+DATA_VER,{cache:'no-store'});
+    const res=await fetch('di_price_data.json.gz?v='+DATA_VER);
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    const total=+res.headers.get('Content-Length')||0;
+    if(res.body&&total){
+      const rd=res.body.getReader(),chunks=[];let got=0;const t0=Date.now();
+      for(;;){const r=await rd.read();if(r.done)break;chunks.push(r.value);got+=r.value.length;
+        const sec=(Date.now()-t0)/1000,sp=got/Math.max(sec,0.1);
+        setP('正在下载数据库 '+(got/1048576).toFixed(1)+' / '+(total/1048576).toFixed(1)+' MB'+(sec>2?'（约还需 '+Math.max(1,Math.round((total-got)/sp))+' 秒）':''));
+      }
+      const all=new Uint8Array(got);let off=0;for(const c of chunks){all.set(c,off);off+=c.length;}
+      return all.buffer;
+    }
+    return await res.arrayBuffer();
   }catch(e){
-    res=await fetch('di_price_data.json.gz?v='+DATA_VER);
+    setP('⚠ 数据库下载失败（'+((e&&e.message)||e)+'）。请检查网络后 <a href="javascript:location.reload()" style="color:#c62828;text-decoration:underline">点击重试</a>；若公司网络访问 github.io 慢/被拦，可用局域网 http://172.20.10.3:8899/ 或切换手机流量。');
+    return null;
   }
-  const buf=await res.arrayBuffer();
+}
+async function loadData(){
+  const buf=await loadBuf();
+  if(!buf)return;
   const ds=new DecompressionStream('gzip');
   const txt=await new Response(new Blob([buf]).stream().pipeThrough(ds)).text();
   const j=JSON.parse(txt);
