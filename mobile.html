@@ -63,7 +63,7 @@ main{padding:10px 12px 96px}
 .cout{display:flex;gap:8px;align-items:flex-end;margin-top:8px}
 .cout .co{flex:1;background:#f7f9fc;border:1px solid var(--border);border-radius:9px;padding:6px 9px;min-width:0}
 .cout .ck{display:block;font-size:10.5px;color:var(--muted);white-space:nowrap}
-.cout .cu,.cout .cs{display:block;font-size:16px;font-weight:700;color:#0d3a75;font-variant-numeric:tabular-nums;word-break:break-all}
+.cout .cu,.cout .cs,.cout .cb{display:block;font-size:16px;font-weight:700;color:#0d3a75;font-variant-numeric:tabular-nums;word-break:break-all}
 .cout .cs{color:var(--accent)}
 .cout .add{flex-shrink:0;padding:11px 14px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-size:13.5px;font-weight:600;white-space:nowrap}
 .cout .add.ok{background:#1a8a3c}
@@ -169,7 +169,7 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:10px 16px 90p
 let D=null,N=0,NM=null,view=[],shown=0,curBu='',onlyLy=false,srcMode='';
 const STEP=30;
 /* 数据版本：重新合并数据后改这里，强制拉新数据包，避免旧缓存 */
-const DATA_VER='20261110-1624';
+const DATA_VER='20261110-2100';
 const EXPECT_N=445513;
 const SEP=/[\s\-_.·\/／／－–—＿•]/g;
 const norm=s=>String(s||'').toLowerCase().replace(SEP,'');
@@ -312,11 +312,12 @@ function renderMore(){
           <label>特折%</label><input type="number" inputmode="decimal" min="0" max="100" step="0.5" value="${sdVal}" placeholder="${stdPh}" class="qSd">
         </div>
         <div class="cout">
-          <div class="co"><span class="ck">折后单价 ¥</span><b class="cu">—</b></div>
+          <div class="co"><span class="ck">标扣后价 ¥</span><b class="cb">—</b></div>
+          <div class="co"><span class="ck">最终单价 ¥</span><b class="cu">—</b></div>
           <div class="co"><span class="ck">小计 ¥</span><b class="cs">—</b></div>
           <button class="add">＋ 报价单</button>
         </div>
-        <div class="ratehint">折扣：<em class="rt">—</em>　<span style="opacity:.75">折后价 = 面价 × (1 − 折扣率)，填特折则优先用特折</span></div>
+        <div class="ratehint">折扣：<em class="rt">—</em>　<span style="opacity:.75">最终价 = 表价 × (1−标扣) × (1−特折)，特折在标扣后价格上额外计算</span></div>
       </div>
     </div>`;
   }
@@ -340,13 +341,15 @@ function calcCard(card){
   const sdRaw=(sdEl.value||'').trim();
   let sd=null;
   if(sdRaw!==''){const v=parseFloat(sdRaw);if(!isNaN(v))sd=Math.min(100,Math.max(0,v))/100}
-  const rate=sd!==null?(1-sd):(dsc!==null?1-dsc:1);
-  const unit=p*rate,sub=unit*qty;
+  const base=p*(dsc!==null?1-dsc:1);
+  const unit=base*(sd!==null?1-sd:1),sub=unit*qty;
   rowCalc[i]={qty,sd};
+  card.querySelector('.cb').textContent=p>0?fmt2(base):'—';
   card.querySelector('.cu').textContent=p>0?fmt2(unit):'—';
   card.querySelector('.cs').textContent=p>0?fmt2(sub):'—';
-  card.querySelector('.rt').textContent=(rate*100).toFixed(0).replace(/\.0$/,'')+'%'
-    +(sd!==null?'（特折）':(dsc!==null?'（标扣）':'（无折扣）'))
+  const pc=v=>(v*100).toFixed(0).replace(/\.0$/,'')+'%';
+  card.querySelector('.rt').textContent=(((dsc!==null?1-dsc:1)*(sd!==null?1-sd:1))*100).toFixed(1).replace(/\.0$/,'')+'%'
+    +(sd!==null&&dsc!==null?`（标扣${pc(dsc)}＋特折${pc(sd)}）`:(sd!==null?'（特折）':(dsc!==null?`（标扣${pc(dsc)}）`:'（无折扣）')))
     +(noCur?'　基准=FY26 价':'');
 }
 $('list').addEventListener('input',e=>{
@@ -378,9 +381,11 @@ function addToQuote(i,qty,sd,btn){
 
 /* ---------- 报价单 ---------- */
 function calcItem(q){
-  const rate=q.sd!==null&&q.sd!==undefined&&q.sd!==''?(1-q.sd):(q.disc!==''&&q.disc!=null?1-Number(q.disc):1);
-  const unit=(Number(q.p)||0)*rate;
-  return {unit,sub:unit*(Number(q.qty)||0)};
+  const dsc=(q.disc!==''&&q.disc!=null)?Number(q.disc):null;
+  const sd=(q.sd!==null&&q.sd!==undefined&&q.sd!=='')?q.sd:null;
+  const base=(Number(q.p)||0)*(dsc!=null?1-dsc:1);   // 标扣后价格
+  const unit=base*(sd!=null?1-sd:1);                  // 特折后最终价
+  return {base,unit,sub:unit*(Number(q.qty)||0)};
 }
 function renderQuote(){
   $('qBadge').textContent=quote.length;
@@ -398,13 +403,14 @@ function renderQuote(){
       <div class="qd">${esc(q.d||'（无描述）')}</div>
       <div class="qedit">
         <label>数量</label><input type="number" min="1" value="${q.qty}" class="eQty">
-        <label>特折%</label><input type="number" min="0" max="100" step="0.5" value="${q.sd!=null&&q.sd!==''?(q.sd*100):''}" placeholder="—用标扣" class="eSd">
+        <label>特折%</label><input type="number" min="0" max="100" step="0.5" value="${q.sd!=null&&q.sd!==''?(q.sd*100):''}" placeholder="—不加特折" class="eSd">
         <button class="del">删除</button>
       </div>
       <div class="qinfo">
-        ${q.p?`<span class="tag${q.fy?' fy':''}">${q.fy?'FY26 价':'面价'} ¥${fmt(q.p)}</span>`:''}
+        ${q.p?`<span class="tag${q.fy?' fy':''}">${q.fy?'FY26 价':'表价'} ¥${fmt(q.p)}</span>`:''}
         ${q.disc!==''&&q.disc!=null?`<span class="tag">标扣 ${(Number(q.disc)*100).toFixed(0).replace(/\.0$/,'')}%</span>`:''}
-        <span class="tag">折后单价 ¥${fmt2(c.unit)}</span>
+        ${q.p?`<span class="tag">标扣后 ¥${fmt2(c.base)}</span>`:''}
+        <span class="tag ju">最终单价 ¥${fmt2(c.unit)}</span>
         ${q.dept?`<span class="tag bu">${esc(q.dept)}</span>`:''}
         ${q.pg?`<span class="tag">PG ${esc(q.pg)}</span>`:''}
         ${q.moq?`<span class="tag">最少订货 ${esc(q.moq)}</span>`:''}
@@ -427,6 +433,7 @@ $('qlist').addEventListener('input',e=>{
   lsSet('di_quote',quote);
   const c=calcItem(q);let sum=0;for(const x of quote)sum+=calcItem(x).sub;
   card.querySelector('.qt div:last-child').innerHTML=`<div style="font-weight:700;color:var(--accent)">¥${fmt2(c.sub)}</div><div style="font-size:10.5px;color:var(--muted)">小计</div>`;
+  const ju=card.querySelector('.ju');if(ju)ju.textContent='最终单价 ¥'+fmt2(c.unit);
   $('qSum').textContent='¥'+fmt2(sum);
 });
 $('qlist').addEventListener('click',e=>{
@@ -437,12 +444,12 @@ $('qlist').addEventListener('click',e=>{
 $('qClear').onclick=()=>{if(quote.length&&confirm('确定清空报价单？')){quote=[];lsSet('di_quote',quote);renderQuote()}};
 $('qCsv').onclick=()=>{
   if(!quote.length){alert('报价单为空');return}
-  const head=['订货号','数量','特殊折扣','标准订货号','描述','面价(RMB)','标扣','折后价','小计(RMB)','替代品','库存','PG','产品部门','最少订货','错误提示','去年价格(含税)','涨幅','价格来源'];
+  const head=['订货号','数量','特殊折扣','标准订货号','描述','表价(RMB)','标扣','标扣后价','最终价','小计(RMB)','替代品','库存','PG','产品部门','最少订货','错误提示','去年价格(含税)','涨幅','价格来源'];
   const lines=[head.join(',')];
   for(const q of quote){
     const c=calcItem(q);
     const remind=!(Number(q.p)>0)?'价格库无含税价':(q.moq&&Number(q.qty)<Number(q.moq)?'少于最少订货量 '+q.moq:'');
-    const row=[q.m,q.qty,q.sd!=null&&q.sd!==''?(q.sd*100).toFixed(2):'',q.m,q.d,q.p,q.disc===''||q.disc==null?'':Number(q.disc),c.unit.toFixed(2),c.sub.toFixed(2),q.subst||'','',q.pg||'',q.dept||'',q.moq||'',remind,q.ly===''||q.ly==null?'':q.ly,q.inc===''||q.inc==null?'':q.inc,q.fy?'FY26价':'FY27现价'];
+    const row=[q.m,q.qty,q.sd!=null&&q.sd!==''?(q.sd*100).toFixed(2):'',q.m,q.d,q.p,q.disc===''||q.disc==null?'':Number(q.disc),c.base.toFixed(2),c.unit.toFixed(2),c.sub.toFixed(2),q.subst||'','',q.pg||'',q.dept||'',q.moq||'',remind,q.ly===''||q.ly==null?'':q.ly,q.inc===''||q.inc==null?'':q.inc,q.fy?'FY26价':'FY27现价'];
     lines.push(row.map(v=>{v=String(v??'').replace(/"/g,'""');return /[",\n]/.test(v)?'"'+v+'"':v}).join(','));
   }
   const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
@@ -453,7 +460,7 @@ $('qCopy').onclick=()=>{
   let sum=0;const L=['DI 报价单（含税 RMB）','─'.repeat(30)];
   for(const q of quote){const c=calcItem(q);sum+=c.sub;
     L.push(`${q.m} × ${q.qty} = ¥${fmt2(c.sub)}   ${q.d||''}`);
-    L.push(`   ${q.fy?'FY26价':'面价'} ¥${fmt(q.p)} | 标扣 ${q.disc===''||q.disc==null?'—':Number(q.disc)} | 折后单价 ¥${fmt2(c.unit)} | 部门 ${q.dept||'—'}${q.moq?' | 最少订货 '+q.moq:''}${q.fy?' | *按 FY26 价':''}`);}
+    L.push(`   表价 ¥${fmt(q.p)} | 标扣后价 ¥${fmt2(c.base)}${q.disc===''||q.disc==null?'（无标扣）':'（标扣 '+Number(q.disc)+'）'} | 最终单价 ¥${fmt2(c.unit)} | 部门 ${q.dept||'—'}${q.moq?' | 最少订货 '+q.moq:''}${q.fy?' | *按 FY26 价':''}`);}
   L.push('─'.repeat(30));L.push(`合计：¥${fmt2(sum)}（${quote.length} 项）`);
   const txt=L.join('\n');
   (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).catch(()=>{

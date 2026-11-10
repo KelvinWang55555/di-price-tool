@@ -113,7 +113,7 @@ footer{color:var(--muted);font-size:12px;padding:16px 28px}
         <th data-k="15" class="num">涨幅</th><th data-k="8">BU</th><th data-k="7">Segment</th>
         <th data-k="6">PG</th><th data-k="10">库存</th><th data-k="12">替代品</th><th data-k="13">旧部门(IMCC)</th>
         <th style="cursor:default">特折%</th><th style="cursor:default">数量</th>
-        <th style="cursor:default" class="num">折后单价</th><th style="cursor:default" class="num">小计</th>
+        <th style="cursor:default" class="num">最终单价</th><th style="cursor:default" class="num">小计</th>
         <th style="cursor:default">报价</th>
       </tr></thead>
       <tbody id="tbody"></tbody>
@@ -126,7 +126,7 @@ footer{color:var(--muted);font-size:12px;padding:16px 28px}
     <button class="btn" id="pgNext">下一页</button>
   </div>
 </div>
-<footer>DI 价格查询工具 HTML 版 · 数据截至 2026-11-03（DI RMB 价） · 仅供参考，正式报价以官方渠道为准 · 折扣口径：折后价 = 面价 × (1 − 折扣率)，特殊折扣优先于标扣</footer>
+<footer>DI 价格查询工具 HTML 版 · 数据截至 2026-11-03（DI RMB 价） · 仅供参考，正式报价以官方渠道为准 · 折扣口径：最终价 = 表价 × (1−标扣) × (1−特折)，特折在标扣后价格上额外计算；无标扣时按表价</footer>
 <button id="qFab">🧾 报价单（<span id="qFabN">0</span>）</button>
 <div id="qDrawer">
   <div class="qh"><b>🧾 报价单（含税 RMB）</b><button id="qClose">✕</button></div>
@@ -146,7 +146,7 @@ if(/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)||window.innerWidth<768)
 let COLS=null, D=null, N=0, NM=null, view=null, sortK=4, sortAsc=false, page=0;
 const PAGE=100;
 /* 数据版本：每次重新合并数据后改这里 → 强制浏览器拉新数据包，避免旧缓存 */
-const DATA_VER='20261110-1624';
+const DATA_VER='20261110-2100';
 const EXPECT_N=445513;      // 期望行数（445,513 = DI 353,199 + FY26 独有 92,036 + 询价 278）
 const SEP=/[\s\-_.·\/／／－–—＿•]/g;
 const norm=s=>String(s||'').toLowerCase().replace(SEP,'');
@@ -325,10 +325,10 @@ document.addEventListener('click',e=>{
     addToQuote(i,rc.qty,rc.sd,ab);
   }
 });
-/* 表格行内实时计算：折后单价 = 面价 × (1 − 折扣率)，小计 = 折后单价 × 数量 */
+/* 表格行内实时计算：最终单价 = 表价 × (1−标扣) × (1−特折)，小计 = 最终单价 × 数量 */
 function rowRate(i,sd){
   const dsc=(D[5][i]===''||D[5][i]==null)?null:Number(D[5][i]);
-  return sd!=null?(1-sd):(dsc!=null?1-dsc:1);
+  return (dsc!=null?1-dsc:1)*(sd!=null?1-sd:1);
 }
 $('tbody').addEventListener('input',e=>{
   const el=e.target.closest('.rSd')||e.target.closest('.rQty');
@@ -380,9 +380,11 @@ $('btnHist').onclick=()=>{renderHist();const d=$('histdd');d.style.display=d.sty
 
 /* ---------- 报价单 ---------- */
 function calcItem(q){
-  const rate=(q.sd!==null&&q.sd!==undefined&&q.sd!=='')?(1-q.sd):(q.disc!==''&&q.disc!=null?1-Number(q.disc):1);
-  const unit=(Number(q.p)||0)*rate;
-  return {unit,sub:unit*(Number(q.qty)||0)};
+  const dsc=(q.disc!==''&&q.disc!=null)?Number(q.disc):null;
+  const sd=(q.sd!==null&&q.sd!==undefined&&q.sd!=='')?q.sd:null;
+  const base=(Number(q.p)||0)*(dsc!=null?1-dsc:1);   // 标扣后价格
+  const unit=base*(sd!=null?1-sd:1);                  // 特折后最终价
+  return {base,unit,sub:unit*(Number(q.qty)||0)};
 }
 function addToQuote(i,qty,sd,btn){
   const noCur=(D[4][i]===''||D[4][i]==null);
@@ -406,10 +408,10 @@ function renderQuote(){
       <div class="qd">${q.d||'（无描述）'}</div>
       <div class="qe">
         <label>数量</label><input type="number" min="1" value="${q.qty}" class="eQty">
-        <label>特折%</label><input type="number" min="0" max="100" step="0.5" value="${q.sd!=null&&q.sd!==''?(q.sd*100):''}" placeholder="—用标扣" class="eSd">
+        <label>特折%</label><input type="number" min="0" max="100" step="0.5" value="${q.sd!=null&&q.sd!==''?(q.sd*100):''}" placeholder="—不加特折" class="eSd">
         <button class="del">删除</button>
       </div>
-      <div class="qinfo">${q.fy?'FY26价':'面价'} ¥${fmt(q.p)} | 标扣 ${q.disc===''||q.disc==null?'—':(Number(q.disc)*100).toFixed(0).replace(/\.0$/,'')+'%'} | 折后单价 ¥${fmt2(c.unit)} | 部门 ${q.dept||'—'}${q.pg?' | PG '+q.pg:''}${q.moq?' | 最少订货 '+q.moq:''}${q.subst?' | 替代 '+q.subst:''}${!q.fy&&q.ly!==''&&q.ly!=null?' | 去年 ¥'+fmt(q.ly)+(q.inc!==''&&q.inc!=null?' '+pct(q.inc):''):''}</div>
+      <div class="qinfo">${q.fy?'FY26价':'表价'} ¥${fmt(q.p)} → 标扣后 ¥${fmt2(c.base)}${q.disc===''||q.disc==null?'（无标扣）':'（标扣 '+(Number(q.disc)*100).toFixed(0).replace(/\.0$/,'')+'%）'} → 最终单价 <span class="fu">¥${fmt2(c.unit)}</span>${q.sd!=null&&q.sd!==''?'（含特折 '+(q.sd*100)+'%）':''} | 部门 ${q.dept||'—'}${q.pg?' | PG '+q.pg:''}${q.moq?' | 最少订货 '+q.moq:''}${q.subst?' | 替代 '+q.subst:''}${!q.fy&&q.ly!==''&&q.ly!=null?' | 去年 ¥'+fmt(q.ly)+(q.inc!==''&&q.inc!=null?' '+pct(q.inc):''):''}</div>
       ${remind?`<div class="remind">${remind}</div>`:''}
     </div>`;
   }
@@ -425,6 +427,7 @@ $('qBody').addEventListener('input',e=>{
   lsSet('di_quote',quote);
   const c=calcItem(q);let sum=0;for(const x of quote)sum+=calcItem(x).sub;
   it.querySelector('.qm span:last-child').textContent='¥'+fmt2(c.sub);
+  const fu=it.querySelector('.fu');if(fu)fu.textContent='¥'+fmt2(c.unit);
   $('qSum').textContent='¥'+fmt2(sum);
 });
 $('qBody').addEventListener('click',e=>{
@@ -436,12 +439,12 @@ $('qClose').onclick=()=>$('qDrawer').classList.remove('open');
 $('qClear').onclick=()=>{if(quote.length&&confirm('确定清空报价单？')){quote=[];lsSet('di_quote',quote);renderQuote()}};
 $('qCsv').onclick=()=>{
   if(!quote.length){alert('报价单为空');return}
-  const head=['订货号','数量','特殊折扣','标准订货号','描述','面价(RMB)','标扣','折后价','小计(RMB)','替代品','库存','PG','产品部门','最少订货','错误提示','去年价格(含税)','涨幅'];
+  const head=['订货号','数量','特殊折扣','标准订货号','描述','表价(RMB)','标扣','标扣后价','最终价','小计(RMB)','替代品','库存','PG','产品部门','最少订货','错误提示','去年价格(含税)','涨幅'];
   const lines=[head.join(',')];
   for(const q of quote){
     const c=calcItem(q);
     const remind=!(Number(q.p)>0)?'价格库无含税价':(q.moq&&Number(q.qty)<Number(q.moq)?'少于最少订货量 '+q.moq:'');
-    const row=[q.m,q.qty,q.sd!=null&&q.sd!==''?(q.sd*100).toFixed(2):'',q.m,q.d,q.p,q.disc===''||q.disc==null?'':Number(q.disc),c.unit.toFixed(2),c.sub.toFixed(2),q.subst||'','',q.pg||'',q.dept||'',q.moq||'',remind,q.ly===''||q.ly==null?'':q.ly,q.inc===''||q.inc==null?'':q.inc];
+    const row=[q.m,q.qty,q.sd!=null&&q.sd!==''?(q.sd*100).toFixed(2):'',q.m,q.d,q.p,q.disc===''||q.disc==null?'':Number(q.disc),c.base.toFixed(2),c.unit.toFixed(2),c.sub.toFixed(2),q.subst||'','',q.pg||'',q.dept||'',q.moq||'',remind,q.ly===''||q.ly==null?'':q.ly,q.inc===''||q.inc==null?'':q.inc];
     lines.push(row.map(v=>{v=String(v??'').replace(/"/g,'""');return /[",\n]/.test(v)?'"'+v+'"':v}).join(','));
   }
   const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
@@ -452,7 +455,7 @@ $('qCopy').onclick=()=>{
   let sum=0;const L=['DI 报价单（含税 RMB）','─'.repeat(30)];
   for(const q of quote){const c=calcItem(q);sum+=c.sub;
     L.push(`${q.m} × ${q.qty} = ¥${fmt2(c.sub)}   ${q.d||''}`);
-    L.push(`   面价 ¥${fmt(q.p)} | 标扣 ${q.disc===''||q.disc==null?'—':Number(q.disc)} | 折后单价 ¥${fmt2(c.unit)} | 部门 ${q.dept||'—'}${q.moq?' | 最少订货 '+q.moq:''}`);}
+    L.push(`   表价 ¥${fmt(q.p)} | 标扣后价 ¥${fmt2(c.base)}${q.disc===''||q.disc==null?'（无标扣）':'（标扣 '+Number(q.disc)+'）'} | 最终单价 ¥${fmt2(c.unit)} | 部门 ${q.dept||'—'}${q.moq?' | 最少订货 '+q.moq:''}`);}
   L.push('─'.repeat(30));L.push(`合计：¥${fmt2(sum)}（${quote.length} 项）`);
   const txt=L.join('\n');
   (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).catch(()=>{
