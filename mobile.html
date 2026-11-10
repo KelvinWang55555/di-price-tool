@@ -51,6 +51,21 @@ main{padding:10px 12px 96px}
 .qrow input{width:64px;padding:8px 8px;border:1px solid var(--border);border-radius:8px;font-size:14px;text-align:right}
 .qrow .add{flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;font-weight:600}
 .qrow .add.ok{background:#1a8a3c}
+/* 报价计算区 */
+.calc{margin-top:10px;border-top:1px dashed var(--border);padding-top:10px}
+.crow{display:flex;gap:8px;align-items:center}
+.crow label{font-size:12px;color:var(--muted);flex-shrink:0}
+.crow input{width:66px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:15px;text-align:right;font-variant-numeric:tabular-nums}
+.crow input:focus{outline:2px solid var(--accent-weak);border-color:var(--accent)}
+.cout{display:flex;gap:8px;align-items:flex-end;margin-top:8px}
+.cout .co{flex:1;background:#f7f9fc;border:1px solid var(--border);border-radius:9px;padding:6px 9px;min-width:0}
+.cout .ck{display:block;font-size:10.5px;color:var(--muted);white-space:nowrap}
+.cout .cu,.cout .cs{display:block;font-size:16px;font-weight:700;color:#0d3a75;font-variant-numeric:tabular-nums;word-break:break-all}
+.cout .cs{color:var(--accent)}
+.cout .add{flex-shrink:0;padding:11px 14px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-size:13.5px;font-weight:600;white-space:nowrap}
+.cout .add.ok{background:#1a8a3c}
+.ratehint{font-size:11.5px;color:var(--muted);margin-top:6px}
+.ratehint em{color:var(--accent);font-style:normal;font-weight:600}
 #moreBtn{display:block;width:100%;padding:13px;margin:6px 0 0;border:1px solid var(--border);border-radius:12px;background:#fff;color:var(--accent);font-size:15px;font-weight:600}
 .empty{padding:50px 20px;text-align:center;color:var(--muted)}
 .fab{position:fixed;right:14px;bottom:72px;display:flex;flex-direction:column;gap:8px}
@@ -214,6 +229,11 @@ function renderMore(){
   for(let r=shown;r<end;r++){
     const i=view[r];
     const incHtml=inc[i]===''?'':(inc[i]>=0?`<span class="up">▲${pct(inc[i])}</span>`:`<span class="down">▼${pct(inc[i])}</span>`);
+    const dsc=(disc[i]===''||disc[i]==null)?null:Number(disc[i]);
+    const stdPh=dsc!=null?'标 '+(dsc*100).toFixed(0).replace(/\.0$/,'')+'%':'可空';
+    const rc=rowCalc[i];
+    const qtyVal=rc?rc.qty:1;
+    const sdVal=rc&&rc.sd!=null?+(rc.sd*100).toFixed(2):'';
     html+=`<div class="card" data-i="${i}">
       <div class="top">
         <div class="mlfb">${esc(D[0][i])}</div>
@@ -224,7 +244,7 @@ function renderMore(){
       <div class="tags">
         ${bu[i]?`<span class="tag bu">${esc(bu[i])}</span>`:''}
         ${pg[i]?`<span class="tag">PG ${esc(pg[i])}</span>`:''}
-        ${disc[i]!==''?`<span class="tag">标扣 ${Number(disc[i])}</span>`:''}
+        ${disc[i]!==''?`<span class="tag">标扣 ${(Number(disc[i])*100).toFixed(0).replace(/\.0$/,'')}%</span><span class="tag">标扣后 ¥${fmt(vat[i]*(1-Number(disc[i])))}</span>`:''}
         ${ly[i]!==''?`<span class="tag">去年 ${fmt(ly[i])} ${incHtml}</span>`:''}
       </div>
       <div class="detail">
@@ -238,17 +258,51 @@ function renderMore(){
         <div class="drow"><span class="k">产品部门（IMCC）</span><span class="v">${esc(odept[i]||bu[i]||'—')}</span></div>
       </div>
       <span class="more dtoggle">展开明细 ▾</span>
-      <div class="qrow">
-        <label>数量</label><input type="number" inputmode="numeric" min="1" value="1" class="qQty">
-        <label>特折%</label><input type="number" inputmode="decimal" min="0" max="100" step="0.5" placeholder="—可空" class="qSd">
-        <button class="add">＋ 加入报价单</button>
+      <div class="calc">
+        <div class="crow">
+          <label>数量</label><input type="number" inputmode="numeric" min="1" value="${qtyVal}" class="qQty">
+          <label>特折%</label><input type="number" inputmode="decimal" min="0" max="100" step="0.5" value="${sdVal}" placeholder="${stdPh}" class="qSd">
+        </div>
+        <div class="cout">
+          <div class="co"><span class="ck">折后单价 ¥</span><b class="cu">—</b></div>
+          <div class="co"><span class="ck">小计 ¥</span><b class="cs">—</b></div>
+          <button class="add">＋ 报价单</button>
+        </div>
+        <div class="ratehint">折扣：<em class="rt">—</em>　<span style="opacity:.75">折后价 = 面价 × (1 − 折扣率)，填特折则优先用特折</span></div>
       </div>
     </div>`;
   }
+  const before=$('list').childElementCount;
   $('list').insertAdjacentHTML('beforeend',html);
   shown=end;
   $('moreBtn').style.display=shown<view.length?'':'none';
+  const cards=$('list').querySelectorAll('.card');
+  for(let k=before;k<cards.length;k++)calcCard(cards[k]);
 }
+
+/* ---------- 卡片内报价实时计算 ---------- */
+const rowCalc={};   // 记住每行填过的数量/特折，翻页或重排后不丢
+function calcCard(card){
+  const i=+card.dataset.i;
+  const p=Number(D[4][i])||0;
+  const dsc=(D[5][i]===''||D[5][i]==null)?null:Number(D[5][i]);
+  const qtyEl=card.querySelector('.qQty'),sdEl=card.querySelector('.qSd');
+  const qty=Math.max(1,parseInt(qtyEl.value)||1);
+  const sdRaw=(sdEl.value||'').trim();
+  let sd=null;
+  if(sdRaw!==''){const v=parseFloat(sdRaw);if(!isNaN(v))sd=Math.min(100,Math.max(0,v))/100}
+  const rate=sd!==null?(1-sd):(dsc!==null?1-dsc:1);
+  const unit=p*rate,sub=unit*qty;
+  rowCalc[i]={qty,sd};
+  card.querySelector('.cu').textContent=p>0?fmt2(unit):'—';
+  card.querySelector('.cs').textContent=p>0?fmt2(sub):'—';
+  card.querySelector('.rt').textContent=(rate*100).toFixed(0).replace(/\.0$/,'')+'%'
+    +(sd!==null?'（特折）':(dsc!==null?'（标扣）':'（无折扣）'));
+}
+$('list').addEventListener('input',e=>{
+  const card=e.target.closest('.card');
+  if(card&&(e.target.classList.contains('qQty')||e.target.classList.contains('qSd')))calcCard(card);
+});
 document.addEventListener('click',e=>{
   const t=e.target.closest('.dtoggle');
   if(t){const d=t.previousElementSibling;d.classList.toggle('open');t.textContent=d.classList.contains('open')?'收起明细 ▴':'展开明细 ▾';return}
@@ -296,7 +350,7 @@ function renderQuote(){
       </div>
       <div class="qinfo">
         ${q.p?`<span class="tag">面价 ¥${fmt(q.p)}</span>`:''}
-        ${q.disc!==''&&q.disc!=null?`<span class="tag">标扣 ${Number(q.disc)}</span>`:''}
+        ${q.disc!==''&&q.disc!=null?`<span class="tag">标扣 ${(Number(q.disc)*100).toFixed(0).replace(/\.0$/,'')}%</span>`:''}
         <span class="tag">折后单价 ¥${fmt2(c.unit)}</span>
         ${q.dept?`<span class="tag bu">${esc(q.dept)}</span>`:''}
         ${q.pg?`<span class="tag">PG ${esc(q.pg)}</span>`:''}
