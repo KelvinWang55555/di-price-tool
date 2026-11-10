@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0d3a75">
+<title>DI 价格查询 · 手机版</title>
+<style>
+:root{--bg:#f2f4f7;--panel:#fff;--border:#e3e6ea;--text:#1a2233;--muted:#6b7686;
+--accent:#0f62c0;--accent-weak:#e8f1fb;--up:#c62828;--down:#2e7d32;--warn:#b26a00}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:15px}
+header{background:linear-gradient(135deg,#0d3a75,#0f62c0);color:#fff;padding:14px 16px 12px;position:sticky;top:0;z-index:10}
+header h1{font-size:17px;font-weight:600}
+header .sub{font-size:11.5px;opacity:.85;margin-top:4px}
+.searchbar{margin-top:10px;display:flex;gap:8px}
+.searchbar input{flex:1;padding:12px 14px;border:none;border-radius:10px;font-size:16px;background:#fff;color:#1a2233;outline:none}
+.searchbar button{padding:0 18px;border:none;border-radius:10px;background:#ffd54a;color:#4a3800;font-size:15px;font-weight:700}
+.hint{font-size:11px;opacity:.8;margin-top:6px}
+.chips{display:flex;gap:8px;margin-top:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex-shrink:0;padding:6px 14px;border-radius:16px;background:rgba(255,255,255,.18);color:#fff;font-size:13px;border:1px solid rgba(255,255,255,.35)}
+.chip.on{background:#fff;color:#0d3a75;font-weight:600;border-color:#fff}
+.stats{display:flex;gap:8px;padding:10px 12px 0;font-size:12px;color:var(--muted)}
+.stats b{color:var(--accent)}
+#loading{padding:70px 20px;text-align:center;color:var(--muted);font-size:14px}
+.spin{display:inline-block;width:26px;height:26px;border:3px solid #d5dce6;border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite;margin-bottom:12px}
+@keyframes sp{to{transform:rotate(360deg)}}
+main{padding:10px 12px 96px}
+.view{display:none}.view.on{display:block}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;box-shadow:0 1px 2px rgba(16,32,64,.04)}
+.card .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.mlfb{font-family:Consolas,monospace;font-weight:700;font-size:15.5px;color:#0d3a75;word-break:break-all}
+.price{text-align:right;flex-shrink:0}
+.price .p{font-size:19px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums}
+.price .lab{font-size:10.5px;color:var(--muted)}
+.desc{font-size:13px;color:#44506a;margin-top:6px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.desc.full{display:block;-webkit-line-clamp:unset}
+.more{font-size:12px;color:var(--accent);margin-top:4px;display:inline-block}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.tag{padding:2px 9px;border-radius:10px;font-size:11.5px;background:#eef2f7;color:#44506a}
+.tag.bu{background:#e3ecf8;color:#0d3a75;font-weight:600}
+.detail{display:none;margin-top:10px;border-top:1px dashed var(--border);padding-top:10px}
+.detail.open{display:block}
+.drow{display:flex;justify-content:space-between;font-size:13px;padding:4px 0}
+.drow .k{color:var(--muted)}
+.drow .v{text-align:right;max-width:60%;word-break:break-all;font-variant-numeric:tabular-nums}
+.up{color:var(--up);font-weight:700}.down{color:var(--down);font-weight:700}
+.qrow{display:flex;gap:8px;align-items:center;margin-top:10px;border-top:1px dashed var(--border);padding-top:10px}
+.qrow label{font-size:12px;color:var(--muted)}
+.qrow input{width:64px;padding:8px 8px;border:1px solid var(--border);border-radius:8px;font-size:14px;text-align:right}
+.qrow .add{flex:1;padding:10px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;font-weight:600}
+.qrow .add.ok{background:#1a8a3c}
+#moreBtn{display:block;width:100%;padding:13px;margin:6px 0 0;border:1px solid var(--border);border-radius:12px;background:#fff;color:var(--accent);font-size:15px;font-weight:600}
+.empty{padding:50px 20px;text-align:center;color:var(--muted)}
+.fab{position:fixed;right:14px;bottom:72px;display:flex;flex-direction:column;gap:8px}
+.fab button{width:44px;height:44px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:19px;box-shadow:0 3px 10px rgba(15,98,192,.4)}
+nav{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--border);display:flex;z-index:20;padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:none;background:none;padding:9px 0 8px;font-size:12px;color:var(--muted);position:relative}
+nav button .ic{font-size:20px;display:block}
+nav button.on{color:var(--accent);font-weight:700}
+nav .bdg{position:absolute;top:4px;left:calc(50% + 6px);background:#c62828;color:#fff;font-size:10px;min-width:16px;height:16px;line-height:16px;border-radius:8px;padding:0 4px;display:none}
+/* 报价单 */
+.qhead{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.qhead button{flex:1;padding:11px 6px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--accent);font-size:13px;font-weight:600;min-width:80px}
+.qhead button.danger{color:#c62828}
+.qtotal{background:linear-gradient(135deg,#0d3a75,#0f62c0);color:#fff;border-radius:12px;padding:14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.qtotal .n{font-size:13px;opacity:.85}
+.qtotal .v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.qcard{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px}
+.qcard .qt{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.qcard .qm{font-family:Consolas,monospace;font-weight:700;font-size:14px;color:#0d3a75;word-break:break-all}
+.qcard .qd{font-size:12.5px;color:#44506a;margin-top:3px}
+.qedit{display:flex;gap:8px;align-items:center;margin-top:8px}
+.qedit label{font-size:12px;color:var(--muted)}
+.qedit input{width:70px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px;text-align:right}
+.qedit .del{margin-left:auto;padding:8px 14px;border:none;border-radius:8px;background:#fdecea;color:#c62828;font-size:13px;font-weight:600}
+.qinfo{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.remind{font-size:12px;color:var(--warn);font-weight:600;margin-top:6px}
+/* 查询记录 */
+.hist{background:var(--panel);border:1px solid var(--border);border-radius:12px;margin-bottom:8px}
+.hrow{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.hrow:last-child{border-bottom:none}
+.hrow .hq{flex:1;font-size:14.5px;font-weight:600;color:#0d3a75;word-break:break-all}
+.hrow .hm{font-size:11.5px;color:var(--muted);flex-shrink:0}
+.hrow .hx{border:none;background:none;color:var(--muted);font-size:16px;padding:4px 6px}
+.hclear{text-align:center;margin-top:12px}
+.hclear button{padding:10px 26px;border:1px solid var(--border);border-radius:10px;background:#fff;color:#c62828;font-size:13px}
+footer{text-align:center;color:var(--muted);font-size:11px;padding:10px 16px 90px}
+</style>
+</head>
+<body>
+<header>
+  <h1>DI 产品价格查询 · FY26/27</h1>
+  <div class="sub">含税面价（RMB）· 数据截至 2026-11-03 · 全库 <span id="totalAll">…</span> 条</div>
+  <div class="searchbar">
+    <input type="search" id="kw" placeholder="订货号 / 描述关键词" autocomplete="off">
+    <button id="btnGo">查询</button>
+  </div>
+  <div class="hint">💡 自动忽略 - 、空格等符号：粘贴 6ES7 650-0XH03-2YB0 也能查到</div>
+  <div class="chips" id="chips">
+    <span class="chip on" data-bu="">全部 BU</span>
+    <span class="chip" data-bu="FA">FA</span>
+    <span class="chip" data-bu="MC">MC</span>
+    <span class="chip" data-bu="PA">PA</span>
+    <span class="chip" data-bu="CS">CS</span>
+    <span class="chip" id="chipLy">仅有去年价</span>
+  </div>
+</header>
+<div class="stats">命中 <b id="stHit">-</b> 条 · 含去年价 <b id="stLy">-</b> 条</div>
+<div id="loading"><span class="spin"></span><br>正在加载价格数据库…</div>
+<main style="display:none" id="main">
+  <!-- 查询 -->
+  <section class="view on" id="vSearch">
+    <div id="list"></div>
+    <button id="moreBtn" style="display:none">加载更多</button>
+    <div class="empty" id="empty" style="display:none">没有匹配的物料，换个关键词试试</div>
+  </section>
+  <!-- 报价单 -->
+  <section class="view" id="vQuote">
+    <div class="qtotal"><div><div class="n">报价小计（含税 RMB）</div><div class="v" id="qSum">¥0.00</div></div><div class="n" id="qCount">0 项</div></div>
+    <div class="qhead">
+      <button id="qCsv">📤 导出 CSV</button>
+      <button id="qCopy">📋 复制报价</button>
+      <button id="qClear" class="danger">🗑 清空</button>
+    </div>
+    <div id="qlist"></div>
+    <div class="empty" id="qEmpty" style="display:none">报价单为空<br><span style="font-size:12px">在查询结果卡片底部填写数量后点「加入报价单」</span></div>
+  </section>
+  <!-- 查询记录 -->
+  <section class="view" id="vHist">
+    <div id="hlist"></div>
+    <div class="hclear" id="hclearWrap" style="display:none"><button id="hClear">清空全部记录</button></div>
+    <div class="empty" id="hEmpty" style="display:none">暂无查询记录</div>
+  </section>
+</main>
+<div class="fab"><button id="btnTop" title="回顶部">↑</button></div>
+<nav>
+  <button id="tabSearch" class="on"><span class="ic">🔍</span>查询</button>
+  <button id="tabQuote"><span class="ic">🧾</span>报价单<span class="bdg" id="qBadge">0</span></button>
+  <button id="tabHist"><span class="ic">🕘</span>查询记录</button>
+</nav>
+<footer>DI 价格查询工具 手机版 · 仅供参考，正式报价以官方渠道为准</footer>
+<script>
+let D=null,N=0,NM=null,view=[],shown=0,curBu='',onlyLy=false;
+const STEP=30;
+const SEP=/[\s\-_.·\/／／－–—＿•]/g;
+const norm=s=>String(s||'').toLowerCase().replace(SEP,'');
+const $=id=>document.getElementById(id);
+const fmt=v=>v===''||v==null?'':Number(v).toLocaleString('zh-CN',{maximumFractionDigits:2});
+const fmt2=v=>Number(v).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2});
+const pct=v=>(v>=0?'+':'')+(v*100).toFixed(1)+'%';
+const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+
+/* ---------- 本地存储 ---------- */
+function lsGet(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+let hist=lsGet('di_hist',[]);
+let quote=lsGet('di_quote',[]);
+
+/* ---------- 数据加载 ---------- */
+async function loadData(){
+  const res=await fetch('di_price_data.json.gz');
+  const buf=await res.arrayBuffer();
+  const txt=await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+  const j=JSON.parse(txt);D=j.data;N=j.n;
+  NM=new Array(N);
+  for(let i=0;i<N;i++)NM[i]=norm(D[0][i]);
+  $('loading').style.display='none';
+  $('main').style.display='';
+  $('totalAll').textContent=N.toLocaleString('zh-CN');
+  let lyN=0;const ly=D[14];
+  for(let i=0;i<N;i++)if(ly[i]!=='')lyN++;
+  $('stLy').textContent=lyN.toLocaleString('zh-CN');
+  doSearch(false);
+  renderQuote();renderHist();
+}
+
+/* ---------- 搜索（自动去掉 - 和空格等符号） ---------- */
+function doSearch(record){
+  const raw=$('kw').value.trim();
+  const kws=raw.toLowerCase().split(/\s+/).filter(Boolean);
+  const nkws=kws.map(norm);
+  const ml=D[0],de=D[2],bu=D[8],ly=D[14];
+  view=[];
+  for(let i=0;i<N;i++){
+    if(curBu&&bu[i]!==curBu)continue;
+    if(onlyLy&&ly[i]==='')continue;
+    if(kws.length){
+      let ok=true;
+      const s=ml[i].toLowerCase()+' '+(de[i]||'').toLowerCase();
+      for(let t=0;t<kws.length;t++){
+        if(s.indexOf(kws[t])>=0)continue;
+        if(nkws[t]&&NM[i].indexOf(nkws[t])>=0)continue;
+        ok=false;break;
+      }
+      if(!ok)continue;
+    }
+    view.push(i);
+  }
+  shown=0;$('list').innerHTML='';
+  $('stHit').textContent=view.length.toLocaleString('zh-CN');
+  renderMore();
+  if(record&&raw){addHist(raw,view.length)}
+}
+
+/* ---------- 结果卡片 ---------- */
+function renderMore(){
+  if(!view.length){$('empty').style.display='';$('moreBtn').style.display='none';return}
+  $('empty').style.display='none';
+  const end=Math.min(shown+STEP,view.length);
+  const vat=D[4],l2=D[3],disc=D[5],ly=D[14],inc=D[15],pg=D[6],seg=D[7],moq=D[11],subst=D[12],odept=D[13],opt=D[1],desc=D[2],bu=D[8];
+  let html='';
+  for(let r=shown;r<end;r++){
+    const i=view[r];
+    const incHtml=inc[i]===''?'':(inc[i]>=0?`<span class="up">▲${pct(inc[i])}</span>`:`<span class="down">▼${pct(inc[i])}</span>`);
+    html+=`<div class="card" data-i="${i}">
+      <div class="top">
+        <div class="mlfb">${esc(D[0][i])}</div>
+        <div class="price"><div class="p">${fmt(vat[i])}</div><div class="lab">含税面价 RMB</div></div>
+      </div>
+      <div class="desc">${esc(desc[i]||'（无描述）')}</div>
+      ${(desc[i]&&desc[i].length>60)?'<span class="more" onclick="this.previousElementSibling.classList.add(\'full\');this.remove()">展开全文 ▾</span>':''}
+      <div class="tags">
+        ${bu[i]?`<span class="tag bu">${esc(bu[i])}</span>`:''}
+        ${pg[i]?`<span class="tag">PG ${esc(pg[i])}</span>`:''}
+        ${disc[i]!==''?`<span class="tag">标扣 ${Number(disc[i])}</span>`:''}
+        ${ly[i]!==''?`<span class="tag">去年 ${fmt(ly[i])} ${incHtml}</span>`:''}
+      </div>
+      <div class="detail">
+        <div class="drow"><span class="k">完整订货号（含选项）</span><span class="v">${esc(opt[i]||D[0][i])}</span></div>
+        <div class="drow"><span class="k">L2 未税价</span><span class="v">${fmt(l2[i])}</span></div>
+        <div class="drow"><span class="k">标扣后价（面价×(1-标扣)）</span><span class="v">${disc[i]!==''?fmt(vat[i]*(1-Number(disc[i]))):'—'}</span></div>
+        <div class="drow"><span class="k">去年含税价</span><span class="v">${fmt(ly[i])} ${incHtml}</span></div>
+        <div class="drow"><span class="k">Segment</span><span class="v">${esc(seg[i]||'—')}</span></div>
+        <div class="drow"><span class="k">最少订货量</span><span class="v">${esc(moq[i]||'—')}</span></div>
+        <div class="drow"><span class="k">替代品</span><span class="v">${esc(subst[i]||'—')}</span></div>
+        <div class="drow"><span class="k">产品部门（IMCC）</span><span class="v">${esc(odept[i]||bu[i]||'—')}</span></div>
+      </div>
+      <span class="more dtoggle">展开明细 ▾</span>
+      <div class="qrow">
+        <label>数量</label><input type="number" inputmode="numeric" min="1" value="1" class="qQty">
+        <label>特折%</label><input type="number" inputmode="decimal" min="0" max="100" step="0.5" placeholder="—可空" class="qSd">
+        <button class="add">＋ 加入报价单</button>
+      </div>
+    </div>`;
+  }
+  $('list').insertAdjacentHTML('beforeend',html);
+  shown=end;
+  $('moreBtn').style.display=shown<view.length?'':'none';
+}
+document.addEventListener('click',e=>{
+  const t=e.target.closest('.dtoggle');
+  if(t){const d=t.previousElementSibling;d.classList.toggle('open');t.textContent=d.classList.contains('open')?'收起明细 ▴':'展开明细 ▾';return}
+  const add=e.target.closest('.add');
+  if(add){
+    const card=add.closest('.card');const i=+card.dataset.i;
+    const qty=Math.max(1,parseInt(card.querySelector('.qQty').value)||1);
+    const sdRaw=card.querySelector('.qSd').value.trim();
+    const sd=sdRaw===''?null:(parseFloat(sdRaw)/100);
+    addToQuote(i,qty,sd,add);
+  }
+});
+function addToQuote(i,qty,sd,btn){
+  const ex=quote.find(q=>q.m===D[0][i]);
+  if(ex){ex.qty+=qty;if(sd!==null)ex.sd=sd}
+  else quote.unshift({m:D[0][i],qty,sd,d:D[2][i]||'',p:D[4][i],disc:D[5][i],pg:D[6][i],bu:D[8][i],dept:D[13][i]||D[8][i]||'',moq:D[11][i],subst:D[12][i],ly:D[14][i],inc:D[15][i]});
+  lsSet('di_quote',quote);
+  renderQuote();
+  if(btn){btn.textContent='✓ 已加入';btn.classList.add('ok');setTimeout(()=>{btn.textContent='＋ 加入报价单';btn.classList.remove('ok')},1200)}
+}
+
+/* ---------- 报价单 ---------- */
+function calcItem(q){
+  const rate=q.sd!==null&&q.sd!==undefined&&q.sd!==''?(1-q.sd):(q.disc!==''&&q.disc!=null?1-Number(q.disc):1);
+  const unit=(Number(q.p)||0)*rate;
+  return {unit,sub:unit*(Number(q.qty)||0)};
+}
+function renderQuote(){
+  $('qBadge').textContent=quote.length;
+  $('qBadge').style.display=quote.length?'':'none';
+  $('qEmpty').style.display=quote.length?'none':'';
+  let sum=0,html='';
+  for(let k=0;k<quote.length;k++){
+    const q=quote[k];const c=calcItem(q);sum+=c.sub;
+    const remind=[];
+    if(!(Number(q.p)>0))remind.push('⚠ 该物料在价格库中无含税价');
+    if(q.moq&&Number(q.qty)<Number(q.moq))remind.push(`⚠ 少于最少订货量 ${q.moq}`);
+    html+=`<div class="qcard" data-k="${k}">
+      <div class="qt"><div class="qm">${esc(q.m)}</div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700;color:var(--accent)">¥${fmt2(c.sub)}</div><div style="font-size:10.5px;color:var(--muted)">小计</div></div></div>
+      <div class="qd">${esc(q.d||'（无描述）')}</div>
+      <div class="qedit">
+        <label>数量</label><input type="number" min="1" value="${q.qty}" class="eQty">
+        <label>特折%</label><input type="number" min="0" max="100" step="0.5" value="${q.sd!=null&&q.sd!==''?(q.sd*100):''}" placeholder="—用标扣" class="eSd">
+        <button class="del">删除</button>
+      </div>
+      <div class="qinfo">
+        ${q.p?`<span class="tag">面价 ¥${fmt(q.p)}</span>`:''}
+        ${q.disc!==''&&q.disc!=null?`<span class="tag">标扣 ${Number(q.disc)}</span>`:''}
+        <span class="tag">折后单价 ¥${fmt2(c.unit)}</span>
+        ${q.dept?`<span class="tag bu">${esc(q.dept)}</span>`:''}
+        ${q.pg?`<span class="tag">PG ${esc(q.pg)}</span>`:''}
+        ${q.moq?`<span class="tag">最少订货 ${esc(q.moq)}</span>`:''}
+        ${q.subst?`<span class="tag">替代 ${esc(q.subst)}</span>`:''}
+        ${q.ly!==''&&q.ly!=null?`<span class="tag">去年 ¥${fmt(q.ly)}${q.inc!==''&&q.inc!=null?(q.inc>=0?' <span class="up">▲'+pct(q.inc)+'</span>':' <span class="down">▼'+pct(q.inc)+'</span>'):''}</span>`:''}
+      </div>
+      ${remind.length?`<div class="remind">${remind.join('　')}</div>`:''}
+    </div>`;
+  }
+  $('qlist').innerHTML=html;
+  $('qSum').textContent='¥'+fmt2(sum);
+  $('qCount').textContent=quote.length+' 项';
+}
+$('qlist').addEventListener('input',e=>{
+  const card=e.target.closest('.qcard');if(!card)return;
+  const k=+card.dataset.k,q=quote[k];if(!q)return;
+  const qty=Math.max(1,parseInt(card.querySelector('.eQty').value)||1);
+  const sdRaw=card.querySelector('.eSd').value.trim();
+  q.qty=qty;q.sd=sdRaw===''?null:(parseFloat(sdRaw)/100);
+  lsSet('di_quote',quote);
+  const c=calcItem(q);let sum=0;for(const x of quote)sum+=calcItem(x).sub;
+  card.querySelector('.qt div:last-child').innerHTML=`<div style="font-weight:700;color:var(--accent)">¥${fmt2(c.sub)}</div><div style="font-size:10.5px;color:var(--muted)">小计</div>`;
+  $('qSum').textContent='¥'+fmt2(sum);
+});
+$('qlist').addEventListener('click',e=>{
+  if(!e.target.closest('.del'))return;
+  const card=e.target.closest('.qcard');
+  quote.splice(+card.dataset.k,1);lsSet('di_quote',quote);renderQuote();
+});
+$('qClear').onclick=()=>{if(quote.length&&confirm('确定清空报价单？')){quote=[];lsSet('di_quote',quote);renderQuote()}};
+$('qCsv').onclick=()=>{
+  if(!quote.length){alert('报价单为空');return}
+  const head=['订货号','数量','特殊折扣','标准订货号','描述','面价(RMB)','标扣','折后价','小计(RMB)','替代品','库存','PG','产品部门','最少订货','错误提示','去年价格(含税)','涨幅'];
+  const lines=[head.join(',')];
+  for(const q of quote){
+    const c=calcItem(q);
+    const remind=!(Number(q.p)>0)?'价格库无含税价':(q.moq&&Number(q.qty)<Number(q.moq)?'少于最少订货量 '+q.moq:'');
+    const row=[q.m,q.qty,q.sd!=null&&q.sd!==''?(q.sd*100).toFixed(2):'',q.m,q.d,q.p,q.disc===''||q.disc==null?'':Number(q.disc),c.unit.toFixed(2),c.sub.toFixed(2),q.subst||'','',q.pg||'',q.dept||'',q.moq||'',remind,q.ly===''||q.ly==null?'':q.ly,q.inc===''||q.inc==null?'':q.inc];
+    lines.push(row.map(v=>{v=String(v??'').replace(/"/g,'""');return /[",\n]/.test(v)?'"'+v+'"':v}).join(','));
+  }
+  const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='DI报价单.csv';a.click();
+};
+$('qCopy').onclick=()=>{
+  if(!quote.length){alert('报价单为空');return}
+  let sum=0;const L=['DI 报价单（含税 RMB）','─'.repeat(30)];
+  for(const q of quote){const c=calcItem(q);sum+=c.sub;
+    L.push(`${q.m} × ${q.qty} = ¥${fmt2(c.sub)}   ${q.d||''}`);
+    L.push(`   面价 ¥${fmt(q.p)} | 标扣 ${q.disc===''||q.disc==null?'—':Number(q.disc)} | 折后单价 ¥${fmt2(c.unit)} | 部门 ${q.dept||'—'}${q.moq?' | 最少订货 '+q.moq:''}`);}
+  L.push('─'.repeat(30));L.push(`合计：¥${fmt2(sum)}（${quote.length} 项）`);
+  const txt=L.join('\n');
+  (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).catch(()=>{
+    const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();
+  }).finally(()=>{alert('报价信息已复制到剪贴板')});
+};
+
+/* ---------- 查询记录 ---------- */
+function addHist(q,n){
+  hist=hist.filter(h=>h.q!==q);
+  hist.unshift({q,n,t:Date.now()});
+  if(hist.length>60)hist.length=60;
+  lsSet('di_hist',hist);renderHist();
+}
+function ago(t){
+  const m=Math.floor((Date.now()-t)/60000);
+  if(m<1)return '刚刚';if(m<60)return m+' 分钟前';
+  const h=Math.floor(m/60);if(h<24)return h+' 小时前';
+  const d=new Date(t);return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function renderHist(){
+  $('hEmpty').style.display=hist.length?'none':'';
+  $('hclearWrap').style.display=hist.length?'':'none';
+  $('hlist').innerHTML=hist.map((h,k)=>`<div class="hist"><div class="hrow" data-k="${k}">
+    <div class="hq">${esc(h.q)}</div><div class="hm">${h.n.toLocaleString('zh-CN')} 条 · ${ago(h.t)}</div><button class="hx">✕</button>
+  </div></div>`).join('');
+}
+$('hlist').addEventListener('click',e=>{
+  const row=e.target.closest('.hrow');if(!row)return;
+  const k=+row.dataset.k;
+  if(e.target.closest('.hx')){hist.splice(k,1);lsSet('di_hist',hist);renderHist();return}
+  $('kw').value=hist[k].q;switchTab('search');doSearch(false);
+});
+$('hClear').onclick=()=>{if(confirm('清空全部查询记录？')){hist=[];lsSet('di_hist',hist);renderHist()}};
+
+/* ---------- 标签页切换 ---------- */
+function switchTab(name){
+  for(const [v,b] of [['search','tabSearch'],['quote','tabQuote'],['hist','tabHist']]){
+    $('v'+v.charAt(0).toUpperCase()+v.slice(1)).classList.toggle('on',v===name);
+    $(b).classList.toggle('on',v===name);
+  }
+  window.scrollTo({top:0});
+}
+$('tabSearch').onclick=()=>switchTab('search');
+$('tabQuote').onclick=()=>switchTab('quote');
+$('tabHist').onclick=()=>switchTab('hist');
+
+/* ---------- 事件 ---------- */
+$('btnGo').onclick=()=>{$('kw').blur();doSearch(true)};
+$('kw').addEventListener('keydown',e=>{if(e.key==='Enter'){e.target.blur();doSearch(true)}});
+document.querySelectorAll('.chip[data-bu]').forEach(ch=>ch.addEventListener('click',()=>{
+  document.querySelectorAll('.chip[data-bu]').forEach(c=>c.classList.remove('on'));
+  ch.classList.add('on');curBu=ch.dataset.bu;doSearch(false);
+}));
+$('chipLy').addEventListener('click',()=>{onlyLy=!onlyLy;$('chipLy').classList.toggle('on',onlyLy);doSearch(false)});
+$('moreBtn').onclick=renderMore;
+$('btnTop').onclick=()=>window.scrollTo({top:0,behavior:'smooth'});
+loadData().catch(e=>{$('loading').innerHTML='⚠ 数据加载失败：'+e.message+'<br>请通过网络链接访问（不要用本地文件方式打开）'});
+</script>
+</body>
+</html>
