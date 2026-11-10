@@ -38,6 +38,7 @@ tbody tr:hover{background:var(--accent-weak)}
 .pager{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px;font-size:13px;color:var(--muted)}
 .pager button{padding:5px 12px}
 .tag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11.5px;background:#eef2f7;color:#44506a}
+.tag.fy{background:#fff3d6;color:#8a5a00;font-weight:600}
 #loading{padding:60px;text-align:center;color:var(--muted);font-size:15px}
 footer{color:var(--muted);font-size:12px;padding:16px 28px}
 .spin{display:inline-block;width:22px;height:22px;border:3px solid #d5dce6;border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite;vertical-align:middle;margin-right:10px}
@@ -77,7 +78,7 @@ footer{color:var(--muted);font-size:12px;padding:16px 28px}
 <body>
 <header>
   <h1>DI 产品价格查询工具 · FY26/27（含税面价）</h1>
-  <div class="sub">数据源：DI价格查询工具_FY2627_Nov1（价格源 DI RMB · 含税价 = L2未税价 × 1.13 · 去年价取自 FY26价 表） · 全库 <span id="totalAll">…</span> 条 · <a href="mobile.html" style="color:#ffd54a">📱 手机版入口</a></div>
+  <div class="sub">价格源：DI FY27 现价 + IMCC FY26 全量价格库 · 全库 <span id="totalAll">…</span> 条（有 FY27 现价 <span id="stCur">…</span> · 仅 FY26 价 <span id="stFy26">…</span> · 含去年价 <span id="stLy2">…</span>） · <a href="mobile.html" style="color:#ffd54a">📱 手机版入口</a></div>
 </header>
 <div class="wrap">
   <div class="toolbar">
@@ -89,6 +90,7 @@ footer{color:var(--muted);font-size:12px;padding:16px 28px}
     <select id="fPg"><option value="">全部 PG</option></select>
     <select id="fSeg"><option value="">全部 Segment</option></select>
     <select id="fStock"><option value="">库存不限</option><option value="PTS">PTS</option><option value="PTO">PTO</option></select>
+    <select id="fSrc"><option value="">全部（FY27 现价 + FY26 价）</option><option value="cur">仅 有 FY27 现价</option><option value="fy26">仅 FY26 去年价</option></select>
     <label><input type="checkbox" id="fLy"> 仅有去年价</label>
     <button class="btn primary" id="btnSearch">查询</button>
     <button class="btn" id="btnHist">🕘 记录</button>
@@ -177,9 +179,16 @@ function init(){
   $('tblbox').style.display='';
   $('totalAll').textContent=N.toLocaleString('zh-CN');
   $('stTotal').textContent=N.toLocaleString('zh-CN');
-  let lyN=0,incN=0;
+  let lyN=0,incN=0,curN=0,fyN=0;
   const inc=col(15),vat=col(4),ly=col(14);
-  for(let i=0;i<N;i++){if(ly[i]!==''){lyN++;if(inc[i]!==''&&inc[i]>=0.05)incN++;}}
+  for(let i=0;i<N;i++){
+    if(vat[i]!==''&&vat[i]!=null)curN++;
+    if(ly[i]!==''&&ly[i]!=null){lyN++;if(inc[i]!==''&&inc[i]>=0.05)incN++;}
+    if((vat[i]===''||vat[i]==null)&&ly[i]!==''&&ly[i]!=null)fyN++;
+  }
+  if($('stCur'))$('stCur').textContent=curN.toLocaleString('zh-CN');
+  if($('stFy26'))$('stFy26').textContent=fyN.toLocaleString('zh-CN');
+  if($('stLy2'))$('stLy2').textContent=lyN.toLocaleString('zh-CN');
   $('stLy').textContent=lyN.toLocaleString('zh-CN');
   $('stInc').textContent=incN.toLocaleString('zh-CN');
   buildIndex();
@@ -189,7 +198,7 @@ function doSearch(record){
   const raw=$('kw').value.trim();
   const kws=raw.toLowerCase().split(/\s+/).filter(Boolean);
   const nkws=kws.map(norm);
-  const fb=$('fBu').value,fp=$('fPg').value,fs=$('fSeg').value,fc=$('fStock').value,onlyLy=$('fLy').checked;
+  const fb=$('fBu').value,fp=$('fPg').value,fs=$('fSeg').value,fc=$('fStock').value,onlyLy=$('fLy').checked,fsrc=$('fSrc').value;
   const ml=col(0),de=col(2),bu=col(8),pg=col(6),seg=col(7),st=col(10),ly=col(14),vat=col(4);
   const out=[];
   for(let i=0;i<N;i++){
@@ -197,7 +206,9 @@ function doSearch(record){
     if(fp&&pg[i]!==fp)continue;
     if(fs&&seg[i]!==fs)continue;
     if(fc&&st[i]!==fc)continue;
-    if(onlyLy&&ly[i]==='')continue;
+    if(onlyLy&&(ly[i]===''||ly[i]==null))continue;
+    if(fsrc==='cur'&&(vat[i]===''||vat[i]==null))continue;
+    if(fsrc==='fy26'&&((vat[i]!==''&&vat[i]!=null)||ly[i]===''||ly[i]==null))continue;
     if(kws.length){
       let ok=true;
       const s=ml[i].toLowerCase()+' '+(de[i]||'').toLowerCase();
@@ -215,8 +226,11 @@ function doSearch(record){
   const key=i=>{const v=D[k][i];return v===''||v==null?null:v};
   out.sort((a,b)=>{
     let x=key(a),y=key(b);
+    if(x==null&&y==null)return 0;
+    if(x==null)return 1;              // 空值永远排最后
+    if(y==null)return -1;
     if(typeof x==='number'&&typeof y==='number')return asc?x-y:y-x;
-    x=String(x??'');y=String(y??'');
+    x=String(x);y=String(y);
     return asc?x.localeCompare(y,'zh'):y.localeCompare(x,'zh');
   });
   view=out;page=0;
@@ -233,7 +247,9 @@ function render(){
     const tr=document.createElement('tr');
     const incHtml=inc[i]===''?'':(inc[i]>=0?`<span class="up">▲${pct(inc[i])}</span>`:`<span class="down">▼${pct(inc[i])}</span>`);
     const rc=rowCalc[i]||{qty:1,sd:null};
-    const p=Number(vat[i])||0;
+    const noCur=(vat[i]===''||vat[i]==null);          // 无 FY27 现价 → 用 FY26 价做基准
+    const baseP=noCur?ly[i]:vat[i];
+    const p=Number(baseP)||0;
     const dsc=(dscArr[i]===''||dscArr[i]==null)?null:Number(dscArr[i]);
     const rate=rc.sd!=null?(1-rc.sd):(dsc!=null?1-dsc:1);
     const unit=p*rate,sub=unit*(rc.qty||1);
@@ -242,7 +258,7 @@ function render(){
     tr.innerHTML=
       `<td class="mlfb">${col(0)[i]}</td>`+
       `<td title="${(col(1)[i]||'').replace(/"/g,'&quot;')}">${(col(2)[i]||'').slice(0,60)}</td>`+
-      `<td class="num" style="font-weight:600">${fmt(vat[i])}</td>`+
+      `<td class="num" style="font-weight:600">${fmt(baseP)}${noCur?' <span class="tag fy">FY26</span>':''}</td>`+
       `<td class="num">${fmt(col(3)[i])}</td>`+
       `<td class="num">${col(5)[i]===''?'':(Number(col(5)[i])*100).toFixed(0).replace(/\.0$/,'')+'%'}</td>`+
       `<td class="num">${fmt(ly[i])}</td>`+
@@ -293,7 +309,7 @@ $('tbody').addEventListener('input',e=>{
   if(sdRaw!==''){const v=parseFloat(sdRaw);if(!isNaN(v))sd=Math.min(100,Math.max(0,v))/100}
   const qty=Math.max(1,parseInt(qtyEl.value)||1);
   rowCalc[i]={qty,sd};
-  const p=Number(D[4][i])||0;
+  const p=(D[4][i]===''||D[4][i]==null?Number(D[14][i]):Number(D[4][i]))||0;
   const rate=rowRate(i,sd);
   tr.querySelector('.uUnit').textContent=p>0?fmt2(p*rate):'—';
   tr.querySelector('.uSub').textContent=p>0?fmt2(p*rate*qty):'—';
@@ -337,9 +353,11 @@ function calcItem(q){
   return {unit,sub:unit*(Number(q.qty)||0)};
 }
 function addToQuote(i,qty,sd,btn){
+  const noCur=(D[4][i]===''||D[4][i]==null);
+  const base=noCur?D[14][i]:D[4][i];
   const ex=quote.find(q=>q.m===D[0][i]);
   if(ex){ex.qty+=qty;if(sd!==null&&sd!==undefined)ex.sd=sd}
-  else quote.unshift({m:D[0][i],qty,sd,d:D[2][i]||'',p:D[4][i],disc:D[5][i],pg:D[6][i],bu:D[8][i],dept:D[13][i]||D[8][i]||'',moq:D[11][i],subst:D[12][i],ly:D[14][i],inc:D[15][i]});
+  else quote.unshift({m:D[0][i],qty,sd,d:D[2][i]||'',p:base,fy:noCur,disc:D[5][i],pg:D[6][i],bu:D[8][i],dept:D[13][i]||D[8][i]||'',moq:D[11][i],subst:D[12][i],ly:D[14][i],inc:D[15][i]});
   lsSet('di_quote',quote);renderQuote();
   if(btn){const t=btn.textContent;btn.textContent='✓ 已加入';setTimeout(()=>btn.textContent=t,1000)}
 }
@@ -350,7 +368,7 @@ function renderQuote(){
   let sum=0,html='';
   for(let k=0;k<quote.length;k++){
     const q=quote[k],c=calcItem(q);sum+=c.sub;
-    const remind=!(Number(q.p)>0)?'⚠ 价格库无含税价':(q.moq&&Number(q.qty)<Number(q.moq)?`⚠ 少于最少订货量 ${q.moq}`:'');
+    const remind=!(Number(q.p)>0)?'⚠ 价格库无含税价':(q.fy?'⚠ 无 FY27 现价，按 FY26 价计算':(q.moq&&Number(q.qty)<Number(q.moq)?`⚠ 少于最少订货量 ${q.moq}`:''));
     html+=`<div class="qitem" data-k="${k}">
       <div class="qm"><span>${q.m}</span><span>¥${fmt2(c.sub)}</span></div>
       <div class="qd">${q.d||'（无描述）'}</div>
@@ -359,7 +377,7 @@ function renderQuote(){
         <label>特折%</label><input type="number" min="0" max="100" step="0.5" value="${q.sd!=null&&q.sd!==''?(q.sd*100):''}" placeholder="—用标扣" class="eSd">
         <button class="del">删除</button>
       </div>
-      <div class="qinfo">面价 ¥${fmt(q.p)} | 标扣 ${q.disc===''||q.disc==null?'—':(Number(q.disc)*100).toFixed(0).replace(/\.0$/,'')+'%'} | 折后单价 ¥${fmt2(c.unit)} | 部门 ${q.dept||'—'}${q.pg?' | PG '+q.pg:''}${q.moq?' | 最少订货 '+q.moq:''}${q.subst?' | 替代 '+q.subst:''}${q.ly!==''&&q.ly!=null?' | 去年 ¥'+fmt(q.ly)+(q.inc!==''&&q.inc!=null?' '+pct(q.inc):''):''}</div>
+      <div class="qinfo">${q.fy?'FY26价':'面价'} ¥${fmt(q.p)} | 标扣 ${q.disc===''||q.disc==null?'—':(Number(q.disc)*100).toFixed(0).replace(/\.0$/,'')+'%'} | 折后单价 ¥${fmt2(c.unit)} | 部门 ${q.dept||'—'}${q.pg?' | PG '+q.pg:''}${q.moq?' | 最少订货 '+q.moq:''}${q.subst?' | 替代 '+q.subst:''}${!q.fy&&q.ly!==''&&q.ly!=null?' | 去年 ¥'+fmt(q.ly)+(q.inc!==''&&q.inc!=null?' '+pct(q.inc):''):''}</div>
       ${remind?`<div class="remind">${remind}</div>`:''}
     </div>`;
   }
@@ -410,7 +428,7 @@ $('qCopy').onclick=()=>{
   }).finally(()=>{alert('报价信息已复制到剪贴板')});
 };
 
-$('btnReset').onclick=()=>{$('kw').value='';$('fBu').value='';$('fPg').value='';$('fSeg').value='';$('fStock').value='';$('fLy').checked=false;doSearch()};
+$('btnReset').onclick=()=>{$('kw').value='';$('fBu').value='';$('fPg').value='';$('fSeg').value='';$('fStock').value='';if($('fSrc'))$('fSrc').value='';$('fLy').checked=false;doSearch()};
 $('pgPrev').onclick=()=>{if(page>0){page--;render()}};
 $('pgNext').onclick=()=>{if((page+1)*PAGE<view.length){page++;render()}};
 document.querySelectorAll('th[data-k]').forEach(th=>th.addEventListener('click',()=>{

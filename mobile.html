@@ -40,6 +40,9 @@ main{padding:10px 12px 96px}
 .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .tag{padding:2px 9px;border-radius:10px;font-size:11.5px;background:#eef2f7;color:#44506a}
 .tag.bu{background:#e3ecf8;color:#0d3a75;font-weight:600}
+.tag.fy{background:#fff3d6;color:#8a5a00;font-weight:600}
+.tag.l2{background:#eef2f7;color:#44506a}
+.card.fy26{border-left:3px solid #e0a800}
 .detail{display:none;margin-top:10px;border-top:1px dashed var(--border);padding-top:10px}
 .detail.open{display:block}
 .drow{display:flex;justify-content:space-between;font-size:13px;padding:4px 0}
@@ -107,7 +110,7 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:10px 16px 90p
 <body>
 <header>
   <h1>DI 产品价格查询 · FY26/27</h1>
-  <div class="sub">含税面价（RMB）· 数据截至 2026-11-03 · 全库 <span id="totalAll">…</span> 条</div>
+  <div class="sub">含税面价（RMB）· FY27 现价 + FY26 去年价 · 全库 <span id="totalAll">…</span> 条</div>
   <div class="searchbar">
     <input type="search" id="kw" placeholder="订货号 / 描述关键词" autocomplete="off">
     <button id="btnGo">查询</button>
@@ -120,6 +123,11 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:10px 16px 90p
     <span class="chip" data-bu="PA">PA</span>
     <span class="chip" data-bu="CS">CS</span>
     <span class="chip" id="chipLy">仅有去年价</span>
+  </div>
+  <div class="chips" id="chips2">
+    <span class="chip on" data-src="">全部库存</span>
+    <span class="chip" data-src="cur">有 FY27 现价</span>
+    <span class="chip" data-src="fy26">仅 FY26 价</span>
   </div>
 </header>
 <div class="stats">命中 <b id="stHit">-</b> 条 · 含去年价 <b id="stLy">-</b> 条</div>
@@ -157,7 +165,7 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:10px 16px 90p
 </nav>
 <footer>DI 价格查询工具 手机版 · 仅供参考，正式报价以官方渠道为准</footer>
 <script>
-let D=null,N=0,NM=null,view=[],shown=0,curBu='',onlyLy=false;
+let D=null,N=0,NM=null,view=[],shown=0,curBu='',onlyLy=false,srcMode='';
 const STEP=30;
 const SEP=/[\s\-_.·\/／／－–—＿•]/g;
 const norm=s=>String(s||'').toLowerCase().replace(SEP,'');
@@ -196,11 +204,13 @@ function doSearch(record){
   const raw=$('kw').value.trim();
   const kws=raw.toLowerCase().split(/\s+/).filter(Boolean);
   const nkws=kws.map(norm);
-  const ml=D[0],de=D[2],bu=D[8],ly=D[14];
+  const ml=D[0],de=D[2],bu=D[8],ly=D[14],vat=D[4];
   view=[];
   for(let i=0;i<N;i++){
     if(curBu&&bu[i]!==curBu)continue;
-    if(onlyLy&&ly[i]==='')continue;
+    if(onlyLy&&(ly[i]===''||ly[i]==null))continue;
+    if(srcMode==='cur'&&(vat[i]===''||vat[i]==null))continue;
+    if(srcMode==='fy26'&&(vat[i]!==''&&vat[i]!=null||ly[i]===''||ly[i]==null))continue;
     if(kws.length){
       let ok=true;
       const s=ml[i].toLowerCase()+' '+(de[i]||'').toLowerCase();
@@ -234,24 +244,30 @@ function renderMore(){
     const rc=rowCalc[i];
     const qtyVal=rc?rc.qty:1;
     const sdVal=rc&&rc.sd!=null?+(rc.sd*100).toFixed(2):'';
-    html+=`<div class="card" data-i="${i}">
+    /* 只有 FY26 价的物料：用去年价作为报价基准 */
+    const isFy26=(vat[i]===''||vat[i]==null)&&ly[i]!==''&&ly[i]!=null;
+    const baseP=isFy26?ly[i]:vat[i];
+    const baseLab=isFy26?'FY26 含税价':'含税面价 RMB';
+    html+=`<div class="card${isFy26?' fy26':''}" data-i="${i}">
       <div class="top">
         <div class="mlfb">${esc(D[0][i])}</div>
-        <div class="price"><div class="p">${fmt(vat[i])}</div><div class="lab">含税面价 RMB</div></div>
+        <div class="price"><div class="p">${baseP===''||baseP==null?'—':fmt(baseP)}</div><div class="lab">${baseLab}</div></div>
       </div>
       <div class="desc">${esc(desc[i]||'（无描述）')}</div>
       ${(desc[i]&&desc[i].length>60)?'<span class="more" onclick="this.previousElementSibling.classList.add(\'full\');this.remove()">展开全文 ▾</span>':''}
       <div class="tags">
         ${bu[i]?`<span class="tag bu">${esc(bu[i])}</span>`:''}
         ${pg[i]?`<span class="tag">PG ${esc(pg[i])}</span>`:''}
-        ${disc[i]!==''?`<span class="tag">标扣 ${(Number(disc[i])*100).toFixed(0).replace(/\.0$/,'')}%</span><span class="tag">标扣后 ¥${fmt(vat[i]*(1-Number(disc[i])))}</span>`:''}
-        ${ly[i]!==''?`<span class="tag">去年 ${fmt(ly[i])} ${incHtml}</span>`:''}
+        ${isFy26?'<span class="tag fy">FY26 价 · DI 无现价</span>':''}
+        ${disc[i]!==''?`<span class="tag">标扣 ${(Number(disc[i])*100).toFixed(0).replace(/\.0$/,'')}%</span><span class="tag">标扣后 ¥${fmt(baseP*(1-Number(disc[i])))}</span>`:''}
+        ${!isFy26&&ly[i]!==''?`<span class="tag">去年 ${fmt(ly[i])} ${incHtml}</span>`:''}
       </div>
       <div class="detail">
         <div class="drow"><span class="k">完整订货号（含选项）</span><span class="v">${esc(opt[i]||D[0][i])}</span></div>
-        <div class="drow"><span class="k">L2 未税价</span><span class="v">${fmt(l2[i])}</span></div>
-        <div class="drow"><span class="k">标扣后价（面价×(1-标扣)）</span><span class="v">${disc[i]!==''?fmt(vat[i]*(1-Number(disc[i]))):'—'}</span></div>
-        <div class="drow"><span class="k">去年含税价</span><span class="v">${fmt(ly[i])} ${incHtml}</span></div>
+        <div class="drow"><span class="k">现价（FY27 含税）</span><span class="v">${vat[i]===''||vat[i]==null?'—（DI 库无此物料）':fmt(vat[i])}</span></div>
+        <div class="drow"><span class="k">L2 未税价</span><span class="v">${l2[i]===''||l2[i]==null?'—':fmt(l2[i])}</span></div>
+        <div class="drow"><span class="k">标扣后价（价格×(1-标扣)）</span><span class="v">${disc[i]!==''&&disc[i]!=null?fmt(baseP*(1-Number(disc[i]))):'—'}</span></div>
+        <div class="drow"><span class="k">去年含税价（FY26）</span><span class="v">${ly[i]===''||ly[i]==null?'—':fmt(ly[i])} ${incHtml}</span></div>
         <div class="drow"><span class="k">Segment</span><span class="v">${esc(seg[i]||'—')}</span></div>
         <div class="drow"><span class="k">最少订货量</span><span class="v">${esc(moq[i]||'—')}</span></div>
         <div class="drow"><span class="k">替代品</span><span class="v">${esc(subst[i]||'—')}</span></div>
@@ -284,7 +300,8 @@ function renderMore(){
 const rowCalc={};   // 记住每行填过的数量/特折，翻页或重排后不丢
 function calcCard(card){
   const i=+card.dataset.i;
-  const p=Number(D[4][i])||0;
+  const noCur=(D[4][i]===''||D[4][i]==null);            // 无 FY27 现价
+  const p=(noCur?Number(D[14][i]):Number(D[4][i]))||0;  // 无现价则用 FY26 价
   const dsc=(D[5][i]===''||D[5][i]==null)?null:Number(D[5][i]);
   const qtyEl=card.querySelector('.qQty'),sdEl=card.querySelector('.qSd');
   const qty=Math.max(1,parseInt(qtyEl.value)||1);
@@ -297,7 +314,8 @@ function calcCard(card){
   card.querySelector('.cu').textContent=p>0?fmt2(unit):'—';
   card.querySelector('.cs').textContent=p>0?fmt2(sub):'—';
   card.querySelector('.rt').textContent=(rate*100).toFixed(0).replace(/\.0$/,'')+'%'
-    +(sd!==null?'（特折）':(dsc!==null?'（标扣）':'（无折扣）'));
+    +(sd!==null?'（特折）':(dsc!==null?'（标扣）':'（无折扣）'))
+    +(noCur?'　基准=FY26 价':'');
 }
 $('list').addEventListener('input',e=>{
   const card=e.target.closest('.card');
@@ -316,9 +334,11 @@ document.addEventListener('click',e=>{
   }
 });
 function addToQuote(i,qty,sd,btn){
+  const noCur=(D[4][i]===''||D[4][i]==null);
+  const base=noCur?D[14][i]:D[4][i];
   const ex=quote.find(q=>q.m===D[0][i]);
   if(ex){ex.qty+=qty;if(sd!==null)ex.sd=sd}
-  else quote.unshift({m:D[0][i],qty,sd,d:D[2][i]||'',p:D[4][i],disc:D[5][i],pg:D[6][i],bu:D[8][i],dept:D[13][i]||D[8][i]||'',moq:D[11][i],subst:D[12][i],ly:D[14][i],inc:D[15][i]});
+  else quote.unshift({m:D[0][i],qty,sd,d:D[2][i]||'',p:base,fy:noCur,disc:D[5][i],pg:D[6][i],bu:D[8][i],dept:D[13][i]||D[8][i]||'',moq:D[11][i],subst:D[12][i],ly:D[14][i],inc:D[15][i]});
   lsSet('di_quote',quote);
   renderQuote();
   if(btn){btn.textContent='✓ 已加入';btn.classList.add('ok');setTimeout(()=>{btn.textContent='＋ 加入报价单';btn.classList.remove('ok')},1200)}
@@ -339,6 +359,7 @@ function renderQuote(){
     const q=quote[k];const c=calcItem(q);sum+=c.sub;
     const remind=[];
     if(!(Number(q.p)>0))remind.push('⚠ 该物料在价格库中无含税价');
+    else if(q.fy)remind.push('⚠ 无 FY27 现价，按 FY26 价计算');
     if(q.moq&&Number(q.qty)<Number(q.moq))remind.push(`⚠ 少于最少订货量 ${q.moq}`);
     html+=`<div class="qcard" data-k="${k}">
       <div class="qt"><div class="qm">${esc(q.m)}</div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700;color:var(--accent)">¥${fmt2(c.sub)}</div><div style="font-size:10.5px;color:var(--muted)">小计</div></div></div>
@@ -349,7 +370,7 @@ function renderQuote(){
         <button class="del">删除</button>
       </div>
       <div class="qinfo">
-        ${q.p?`<span class="tag">面价 ¥${fmt(q.p)}</span>`:''}
+        ${q.p?`<span class="tag${q.fy?' fy':''}">${q.fy?'FY26 价':'面价'} ¥${fmt(q.p)}</span>`:''}
         ${q.disc!==''&&q.disc!=null?`<span class="tag">标扣 ${(Number(q.disc)*100).toFixed(0).replace(/\.0$/,'')}%</span>`:''}
         <span class="tag">折后单价 ¥${fmt2(c.unit)}</span>
         ${q.dept?`<span class="tag bu">${esc(q.dept)}</span>`:''}
@@ -384,12 +405,12 @@ $('qlist').addEventListener('click',e=>{
 $('qClear').onclick=()=>{if(quote.length&&confirm('确定清空报价单？')){quote=[];lsSet('di_quote',quote);renderQuote()}};
 $('qCsv').onclick=()=>{
   if(!quote.length){alert('报价单为空');return}
-  const head=['订货号','数量','特殊折扣','标准订货号','描述','面价(RMB)','标扣','折后价','小计(RMB)','替代品','库存','PG','产品部门','最少订货','错误提示','去年价格(含税)','涨幅'];
+  const head=['订货号','数量','特殊折扣','标准订货号','描述','面价(RMB)','标扣','折后价','小计(RMB)','替代品','库存','PG','产品部门','最少订货','错误提示','去年价格(含税)','涨幅','价格来源'];
   const lines=[head.join(',')];
   for(const q of quote){
     const c=calcItem(q);
     const remind=!(Number(q.p)>0)?'价格库无含税价':(q.moq&&Number(q.qty)<Number(q.moq)?'少于最少订货量 '+q.moq:'');
-    const row=[q.m,q.qty,q.sd!=null&&q.sd!==''?(q.sd*100).toFixed(2):'',q.m,q.d,q.p,q.disc===''||q.disc==null?'':Number(q.disc),c.unit.toFixed(2),c.sub.toFixed(2),q.subst||'','',q.pg||'',q.dept||'',q.moq||'',remind,q.ly===''||q.ly==null?'':q.ly,q.inc===''||q.inc==null?'':q.inc];
+    const row=[q.m,q.qty,q.sd!=null&&q.sd!==''?(q.sd*100).toFixed(2):'',q.m,q.d,q.p,q.disc===''||q.disc==null?'':Number(q.disc),c.unit.toFixed(2),c.sub.toFixed(2),q.subst||'','',q.pg||'',q.dept||'',q.moq||'',remind,q.ly===''||q.ly==null?'':q.ly,q.inc===''||q.inc==null?'':q.inc,q.fy?'FY26价':'FY27现价'];
     lines.push(row.map(v=>{v=String(v??'').replace(/"/g,'""');return /[",\n]/.test(v)?'"'+v+'"':v}).join(','));
   }
   const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
@@ -400,7 +421,7 @@ $('qCopy').onclick=()=>{
   let sum=0;const L=['DI 报价单（含税 RMB）','─'.repeat(30)];
   for(const q of quote){const c=calcItem(q);sum+=c.sub;
     L.push(`${q.m} × ${q.qty} = ¥${fmt2(c.sub)}   ${q.d||''}`);
-    L.push(`   面价 ¥${fmt(q.p)} | 标扣 ${q.disc===''||q.disc==null?'—':Number(q.disc)} | 折后单价 ¥${fmt2(c.unit)} | 部门 ${q.dept||'—'}${q.moq?' | 最少订货 '+q.moq:''}`);}
+    L.push(`   ${q.fy?'FY26价':'面价'} ¥${fmt(q.p)} | 标扣 ${q.disc===''||q.disc==null?'—':Number(q.disc)} | 折后单价 ¥${fmt2(c.unit)} | 部门 ${q.dept||'—'}${q.moq?' | 最少订货 '+q.moq:''}${q.fy?' | *按 FY26 价':''}`);}
   L.push('─'.repeat(30));L.push(`合计：¥${fmt2(sum)}（${quote.length} 项）`);
   const txt=L.join('\n');
   (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).catch(()=>{
@@ -456,6 +477,10 @@ document.querySelectorAll('.chip[data-bu]').forEach(ch=>ch.addEventListener('cli
   ch.classList.add('on');curBu=ch.dataset.bu;doSearch(false);
 }));
 $('chipLy').addEventListener('click',()=>{onlyLy=!onlyLy;$('chipLy').classList.toggle('on',onlyLy);doSearch(false)});
+document.querySelectorAll('.chip[data-src]').forEach(ch=>ch.addEventListener('click',()=>{
+  document.querySelectorAll('.chip[data-src]').forEach(c=>c.classList.remove('on'));
+  ch.classList.add('on');srcMode=ch.dataset.src;doSearch(false);
+}));
 $('moreBtn').onclick=renderMore;
 $('btnTop').onclick=()=>window.scrollTo({top:0,behavior:'smooth'});
 loadData().catch(e=>{$('loading').innerHTML='⚠ 数据加载失败：'+e.message+'<br>请通过网络链接访问（不要用本地文件方式打开）'});
