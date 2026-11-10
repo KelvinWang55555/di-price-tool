@@ -110,7 +110,8 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:10px 16px 90p
 <body>
 <header>
   <h1>DI 产品价格查询 · FY26/27</h1>
-  <div class="sub">含税面价（RMB）· FY27 现价 + FY26 去年价 · 全库 <span id="totalAll">…</span> 条</div>
+  <div class="sub">含税面价（RMB）· FY27 现价 + FY26 去年价 · 全库 <span id="totalAll">…</span> 条 · 版本 <span id="verTxt">…</span></div>
+  <div id="verWarn" style="display:none;background:#c62828;color:#fff;padding:8px 12px;font-size:12.5px;line-height:1.55;border-radius:8px;margin:8px 0"></div>
   <div class="searchbar">
     <input type="search" id="kw" placeholder="订货号 / 描述关键词" autocomplete="off">
     <button id="btnGo">查询</button>
@@ -167,6 +168,9 @@ footer{text-align:center;color:var(--muted);font-size:11px;padding:10px 16px 90p
 <script>
 let D=null,N=0,NM=null,view=[],shown=0,curBu='',onlyLy=false,srcMode='';
 const STEP=30;
+/* 数据版本：重新合并数据后改这里，强制拉新数据包，避免旧缓存 */
+const DATA_VER='20261110-1624';
+const EXPECT_N=445513;
 const SEP=/[\s\-_.·\/／／－–—＿•]/g;
 const norm=s=>String(s||'').toLowerCase().replace(SEP,'');
 const $=id=>document.getElementById(id);
@@ -183,15 +187,23 @@ let quote=lsGet('di_quote',[]);
 
 /* ---------- 数据加载 ---------- */
 async function loadData(){
-  const res=await fetch('di_price_data.json.gz');
+  let res;
+  try{res=await fetch('di_price_data.json.gz?v='+DATA_VER,{cache:'no-store'});}
+  catch(e){res=await fetch('di_price_data.json.gz?v='+DATA_VER);}
   const buf=await res.arrayBuffer();
   const txt=await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
   const j=JSON.parse(txt);D=j.data;N=j.n;
+  if(EXPECT_N&&N!==EXPECT_N){
+    const w=$('verWarn');
+    w.style.display='block';
+    w.innerHTML='⚠ 加载到的是旧数据包（'+N.toLocaleString('zh-CN')+' 条 / 应为 '+EXPECT_N.toLocaleString('zh-CN')+' 条），去年价会不全。请下拉刷新或清缓存后重进。';
+  }
   NM=new Array(N);
   for(let i=0;i<N;i++)NM[i]=norm(D[0][i]);
   $('loading').style.display='none';
   $('main').style.display='';
   $('totalAll').textContent=N.toLocaleString('zh-CN');
+  if($('verTxt'))$('verTxt').textContent=DATA_VER.slice(4,6)+'-'+DATA_VER.slice(6,8)+' '+DATA_VER.slice(9,11)+':'+DATA_VER.slice(11,13);
   let lyN=0;const ly=D[14];
   for(let i=0;i<N;i++)if(ly[i]!=='')lyN++;
   $('stLy').textContent=lyN.toLocaleString('zh-CN');
